@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description:
+  Template to provision an EC2 Instance with public IP. Create a Security Group and associate with this EC2.
+  Install NGINX server using User Data.
+
+# getting the name of the base stack which is created first and has VPC details
+Parameters:
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t2.micro
+
+  InstanceImageId:
+    Description: EC2 Image Id from this region
+    Type: AWS::EC2::Image::Id
+    Default: ami-09e67e426f25ce0d7 # defaults for amazon linux in us-east-1 region
+  Key:
+    Type: String
+    Description: The key used to access the instance.
+Resources:
+  # create VPC
+  customVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: 'true'
+      EnableDnsSupport: 'true'
+      InstanceTenancy: default
+      Tags:
+       - Key: Name
+         Value: demo-vpc
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref customVPC
+  EC2Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AssignIpv6AddressOnCreation: false
+      AvailabilityZone: "us-east-1a"
+      CidrBlock: "10.0.0.0/24" # Required
+      MapPublicIpOnLaunch: true
+      OutpostArn: "String"
+      Tags:
+        Tags
+      VpcId: !ref customVPC
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !ref customVPC
+  InternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !ref InternetGateway
+      RouteTableId: !ref RouteTable
+  EC2SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !ref RouteTable
+      SubnetId: !Ref EC2Subnet
+  # create a security group
+  customSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: NginxWebServer-SG
+      GroupDescription: Enable http(80) & ssh(22) access
+      VpcID: !Ref  customVPC
+
+      SecurityGroupIngress:
+        # allow http
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0 # non-specific IP
+        # allow ssh
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0 # this is for demo otherwise use personal local IP or more secured corporate gateway IP
+      SecurityGroupEgress:
+        - IpProtocol: -1 # Required
+          CidrIp: "0.0.0.0/0
+           #EC2 instance which will have access for http and ssh
+
+  EC2-Webserver:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: us-east-1a
+      DisableApiTermination: True
+      KeyName: !Ref Key
+      SecurityGroupIds:
+        -- !Ref customSG
+        UserData:
+        Fn::Base64:  |
+          #!/bin/bash -xe
+          sudo apt-get update -y # good practice to update existing packages
+          #sudo apt-get install nginx -y # install web server
+          #cd /var/www/html
+          #echo welcome to Jam  > index.html
+          #sudo systemctl start nginx
+        Key: EC2
+        Value: NGNIX-WEBSERVER
